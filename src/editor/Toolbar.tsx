@@ -1,7 +1,10 @@
 import React, {
   useState,
   useEffect,
-  useRef
+  useRef,
+  FormEvent,
+  ChangeEvent,
+  MouseEvent
 } from "react";
 import {
   ButtonGroup,
@@ -44,7 +47,7 @@ const useStyles = makeStyles(theme => ({
     }
   },
   container: {
-    padding: '8px 7px 6px',
+    padding: '5px',
     position: 'absolute',
     zIndex: 1,
     top: '-10000px',
@@ -52,26 +55,30 @@ const useStyles = makeStyles(theme => ({
     marginTop: '-6px',
     opacity: 0,
     backgroundColor: '#222',
-    borderRadius: '4px',
-    transition: 'opacity 0.75s'
+    borderRadius: '4px'
   }
 }));
 
 export interface ToolbarProps {}
 
-export function Toolbar(props: ToolbarProps) {
-  const [link, setLink] = useState('');
+export function Toolbar({}: ToolbarProps) {
+  const [link, setLink] = useState<string>('');
+  const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
+  const [lastSelection, setLastSelection] = useState<Range|null>(null);
   const s = useStyles();
-
-  const ref : any = useRef()
-  const editor = useSlate()
+  const editor = useSlate();
+  const ref: React.MutableRefObject<any> = useRef();
 
   useEffect(() => {
-    const el : any = ref.current
+    const el: any = ref.current
     const { selection } = editor
 
     if (!el) {
-      return
+      return;
+    }
+
+    if (selection) {
+      setLastSelection(selection);
     }
 
     if (
@@ -80,27 +87,51 @@ export function Toolbar(props: ToolbarProps) {
       Range.isCollapsed(selection) ||
       Editor.string(editor, selection) === ''
     ) {
-      el.removeAttribute('style')
-      return
+      if (!showUrlInput) {
+        el.removeAttribute('style');
+      }
+      return;
     }
 
     const domSelection = window.getSelection();
 
     if (domSelection) {
-      const domRange = domSelection.getRangeAt(0)
-      const rect = domRange.getBoundingClientRect()
-      el.style.opacity = 1
-      el.style.top = `${rect.top + window.pageYOffset - el.offsetHeight}px`
+      const domRange = domSelection.getRangeAt(0);
+      const rect = domRange.getBoundingClientRect();
+
+      el.style.opacity = '1';
+      el.style.top = `${rect.top + window.pageYOffset - el.offsetHeight}px`;
       el.style.left = `${rect.left +
         window.pageXOffset -
         el.offsetWidth / 2 +
-        rect.width / 2}px`
+        rect.width / 2}px`;
     }
   })
 
   return (
     <div ref={ref} className={s.container}>
-        {!link ? (
+        {showUrlInput ? (
+          /* URL input field */
+          <form onSubmit={onUrlFormSubmit}>
+            <Input
+              className={s.input}
+              type="url"
+              value={link}
+              onChange={onUrlInputChange}
+              endAdornment={
+                <Close
+                  className={s.close}
+                  fontSize="small"
+                  onClick={onCloseUrlInput}
+                />
+              }
+              placeholder="https://"
+              disableUnderline
+              fullWidth
+              autoFocus
+            />
+          </form>
+        ) : (
           /* Formatting controls */
           <ButtonGroup variant="text" color="primary">
             <IconButton className={s.button} size="small" onMouseDown={onBoldButtonMouseDown}>
@@ -116,52 +147,69 @@ export function Toolbar(props: ToolbarProps) {
               <Link fontSize="small" />
             </IconButton>
           </ButtonGroup>
-        ) : (
-          /* URL input field */
-          <form onSubmit={x => x.preventDefault()}>
-            <Input
-              className={s.input}
-              type="url"
-              value={link}
-              onChange={x => setLink(x.target.value)}
-              endAdornment={
-                <Close
-                  className={s.close}
-                  fontSize="small"
-                  onClick={() => setLink('')}
-                />
-              }
-              placeholder="https://"
-              disableUnderline
-              fullWidth
-              autoFocus
-            />
-          </form>
         )}
     </div>
   );
 
-  function onBoldButtonMouseDown(event: any) {
+  function onBoldButtonMouseDown(event: MouseEvent) {
     event.preventDefault();
     toggleFormat(editor, 'bold');
   }
 
-  function onItalicButtonMouseDown(event: any) {
+  function onItalicButtonMouseDown(event: MouseEvent) {
     event.preventDefault();
     toggleFormat(editor, 'italic');
   }
 
-  function onUnderlinedButtonMouseDown(event: any) {
+  function onUnderlinedButtonMouseDown(event: MouseEvent) {
     event.preventDefault();
     toggleFormat(editor, 'underlined');
   }
 
-  function onLinkButtonMouseDown(event: any) {
+  function onLinkButtonMouseDown(event: MouseEvent) {
     event.preventDefault();
-    insertLink(editor, 'https://www.google.com');
+    const nodes: any = Editor.nodes(editor, {
+      match: n => n.type === 'link',
+    });
+
+    for (const [node] of nodes) {
+      if (node.url) {
+        setLink(node.url);
+      }
+    }
+
+    setShowUrlInput(true);
   }
 
-  function toggleFormat(editor: any, format: any) {
+  function onUrlInputChange(event: ChangeEvent) {
+    event.preventDefault();
+    setLink((event.target as HTMLInputElement).value);
+  }
+
+  function onUrlFormSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (lastSelection) {
+      editor.selection = lastSelection;
+
+      if (link) {
+        insertLink(editor, link);
+        setLink('');
+      } else {
+        removeLink(editor);
+      }
+
+      setLastSelection(null);
+      setShowUrlInput(false);
+    }
+  }
+
+  function onCloseUrlInput(event: MouseEvent) {
+    event.preventDefault();
+    setLink('');
+    setShowUrlInput(false);
+  }
+
+  function toggleFormat(editor: Editor, format: string) {
     Transforms.setNodes(
       editor,
       { [format]: isFormatActive(editor, format) ? null : true },
@@ -169,7 +217,7 @@ export function Toolbar(props: ToolbarProps) {
     )
   }
   
-  function isFormatActive(editor: any, format: any) {
+  function isFormatActive(editor: Editor, format: string) {
     const [match]: any = Editor.nodes(editor, {
       match: n => n[format] === true,
       mode: 'all',
@@ -177,48 +225,32 @@ export function Toolbar(props: ToolbarProps) {
     return !!match;
   }
 
-  function insertLink(editor: any, url: string) {
+  function insertLink(editor: Editor, url: string) {
     if (editor.selection) {
-      wrapLink(editor, url);
+      if (isLinkActive(editor)) {
+        removeLink(editor);
+      }
+
+      Transforms.setNodes(
+        editor,
+        { type: 'link', url, children: [] },
+        { match: Text.isText, split: true }
+      )
     }
   }
-}
 
-export function wrapLink(editor: any, url: string) {
-  if (isLinkActive(editor)) {
-    unwrapLink(editor);
+  function isLinkActive(editor: Editor) {
+    const [match]: any = Editor.nodes(editor, {
+      match: n => n.type === 'link',
+    });
+    return !!match;
   }
 
-  const { selection } = editor;
-  const isCollapsed = selection && Range.isCollapsed(selection);
-  const link = {
-    type: 'link',
-    url,
-    children: isCollapsed ? [{ text: url }] : [],
-  };
-
-  if (isCollapsed) {
-    Transforms.insertNodes(editor, link);
-  } else {
+  function removeLink(editor: Editor) {
     Transforms.setNodes(
       editor,
-      link,
+      { type: 'paragraph', children: [{ text: '' }] },
       { match: Text.isText, split: true }
     )
-    //Transforms.wrapNodes(editor, link, { split: true });
-    //Transforms.collapse(editor, { edge: 'end' });
   }
-};
-
-function isLinkActive(editor: any) {
-  const [match]: any = Editor.nodes(editor, {
-    match: n => n.type === 'link',
-  });
-  return !!match;
-}
-
-function unwrapLink(editor: any) {
-  Transforms.unwrapNodes(editor, {
-    match: n => n.type === 'link'
-  });
 }

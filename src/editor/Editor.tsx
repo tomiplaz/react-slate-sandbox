@@ -7,9 +7,8 @@ import {
   RenderElementProps,
   RenderLeafProps
 } from "slate-react";
-import isUrl from 'is-url';
 import { DefaultElement } from "./elements";
-import { Toolbar, wrapLink } from "./Toolbar";
+import { Toolbar } from "./Toolbar";
 
 function renderElement(props: RenderElementProps) {
   const { attributes, children } = props;
@@ -46,35 +45,7 @@ export interface EditorProps {
 
 export function Editor(props: EditorProps) {
   const { value, onChange, ...other } = props;
-  const editor = React.useMemo(() => withReact(withLinks(createEditor())), []);
-
-  function withLinks(editor: any) {
-    /* const { insertData, insertText, isInline } = editor
-  
-    editor.isInline = (element: any) => {
-      return element.type === 'link' ? true : isInline(element)
-    }
-  
-    editor.insertText = (text: any) => {
-      if (text && isUrl(text)) {
-        wrapLink(editor, text)
-      } else {
-        insertText(text)
-      }
-    }
-  
-    editor.insertData = (data: any) => {
-      const text = data.getData('text/plain')
-  
-      if (text && isUrl(text)) {
-        wrapLink(editor, text)
-      } else {
-        insertData(data)
-      }
-    } */
-  
-    return editor
-  }
+  const editor = React.useMemo(() => withReact(createEditor()), []);
 
   return (
     <Slate editor={editor} value={value} onChange={onChange}>
